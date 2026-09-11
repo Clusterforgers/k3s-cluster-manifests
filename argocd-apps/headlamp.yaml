@@ -10,6 +10,14 @@ spec:
     chart: headlamp
     targetRevision: 0.45.0
     helm:
+      parameters:
+        - name: config.sessionTTL
+          # Headlamp's own session clock, independent of how long the pasted
+          # token stays valid: at the 86400 default a phone gets logged out
+          # daily even holding a non-expiring token. This is a year, the
+          # documented maximum, so "paste once per device" means once. Lower it
+          # if a lost, unlocked phone worries you more than retyping does.
+          value: "31536000"
       values: |
         # Reached on <any-node-tailscaleIp>:30080. Deliberately NOT an Ingress:
         # the nginx controller runs hostNetwork on queen, so anything behind it
@@ -21,10 +29,12 @@ spec:
           nodePort: 30080
 
         config:
-          # Log in by pasting a ServiceAccount token (see README). The
-          # alternative, unsafeUseServiceAccountToken, would make every tailnet
-          # device that can reach 30080 a silent cluster-admin.
+          # Log in by pasting the standing token from the headlamp-token Secret
+          # below. The alternative, unsafeUseServiceAccountToken, would make
+          # every tailnet device that can reach 30080 a silent cluster-admin.
           unsafeUseServiceAccountToken: false
+          # NOTE: sessionTTL is deliberately NOT set here; see the parameters
+          # block above for why putting it in this file breaks the pod.
           # No OIDC here, and without this the chart still ships an empty
           # "oidc" Secret that ArgoCD would track forever for nothing.
           oidc:
@@ -62,6 +72,27 @@ spec:
         # https://headlamp.dev/docs/latest/installation/in-cluster/#installing-plugins
         pluginsManager:
           enabled: false
+
+        # A standing login token that never expires, so each device pastes once
+        # and is done, rather than everyone needing kubectl to mint a fresh one.
+        # `kubectl create token` only issues bounded tokens (the API server caps
+        # them at a year), so the non-expiring variant has to come from a Secret
+        # the token controller fills in. Verified on this cluster: the issued
+        # JWT carries no `exp` claim.
+        #
+        # The flip side of never expiring is that revoking means deleting this
+        # Secret, which invalidates every device at once. Do that if a phone
+        # holding it is lost, then re-paste the new token where it's wanted.
+        extraManifests:
+          - |
+            apiVersion: v1
+            kind: Secret
+            metadata:
+              name: headlamp-token
+              namespace: headlamp
+              annotations:
+                kubernetes.io/service-account.name: headlamp
+            type: kubernetes.io/service-account-token
   destination:
     server: 'https://kubernetes.default.svc'
     namespace: headlamp
@@ -71,3 +102,13 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+  ignoreDifferences:
+    # The token controller fills in this Secret's data after ArgoCD creates it.
+    # The manifest above declares no data at all, so selfHeal would otherwise
+    # have a standing reason to keep wiping the token back out.
+    - group: ''
+      kind: Secret
+      name: headlamp-token
+      namespace: headlamp
+      jsonPointers:
+        - /data

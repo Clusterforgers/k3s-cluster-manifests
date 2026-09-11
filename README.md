@@ -122,12 +122,19 @@ served on queen's public 80/443. NodePorts above 30000 aren't in `server.nix`'s
 they answer on — the same trick the registry uses for 30500. It follows that
 there is no `coredns-custom` entry to add either.
 
-Sign-in wants a ServiceAccount token. `open-headlamp` (from `k3s-cluster`'s
-client module) prints the URL and mints one, or by hand:
+Sign-in wants a ServiceAccount token, and there is one standing token that
+never expires, so a phone or a laptop pastes it once and stays logged in.
+`open-headlamp` (from `k3s-cluster`'s client module) prints the URL and the
+token, or by hand:
 
 ```bash
-kubectl create token headlamp -n headlamp --duration=24h
+kubectl get secret headlamp-token -n headlamp -o jsonpath='{.data.token}' | base64 -d
 ```
+
+**Revoking** means deleting `secret/headlamp-token`; that invalidates every
+device at once, and ArgoCD re-creates the Secret with a fresh token on the next
+sync, which then has to be re-pasted where it's wanted. Do that if a phone
+holding it goes missing.
 
 That token is `cluster-admin`, same as the pod's ServiceAccount. Two settings
 worth knowing before changing them:
@@ -139,6 +146,14 @@ worth knowing before changing them:
 - `config.enableHelm` is `false`. It would put Helm install/upgrade/delete in
   the UI, which is a route to mutating the cluster behind ArgoCD's back —
   every release here is owned by a manifest in this repo.
+
+One sharp edge if you ever touch `sessionTTL`: it is set through ArgoCD's
+`helm.parameters`, **not** the `values` block, and moving it will crash-loop the
+pod. ArgoCD passes `values` to Helm as a values *file*, and that path decodes
+numbers as float64, so anything `>= 1e6` arrives at the template in scientific
+notation — the container gets `-session-ttl=3.1536e+07`, fails to parse it as an
+int, and exits on startup. `parameters` becomes `--set`, which keeps it an
+integer. Through a values file the ceiling is about 604800 (7 days).
 
 Third-party plugins (ArgoCD, cert-manager, Flux, …) are available through
 `pluginsManager`, left disabled: that sidecar `npx`-fetches plugins into an
