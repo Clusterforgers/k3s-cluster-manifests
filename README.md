@@ -107,6 +107,45 @@ Longhorn UI (no auth, don't expose):
 kubectl -n longhorn-system port-forward svc/longhorn-frontend 8080:80
 ```
 
+## Cluster dashboard (Headlamp)
+
+[Headlamp](https://headlamp.dev) is the browser-side counterpart to `k9s`,
+deployed via `argocd-apps/headlamp.yaml`. Workload pages draw CPU/memory graphs
+straight off the existing `kube-prometheus-stack` through a plugin bundled in
+the image, so it needs no Grafana tunnel for the common case.
+
+It's served on **`<any-node-tailscaleIp>:30080`**, e.g.
+<http://100.96.184.94:30080> for queen. It is deliberately *not* an Ingress
+host: the nginx controller runs `hostNetwork` on queen, so anything behind it is
+served on queen's public 80/443. NodePorts above 30000 aren't in `server.nix`'s
+`allowedTCPPorts`, which leaves the trusted `tailscale0` as the only interface
+they answer on — the same trick the registry uses for 30500. It follows that
+there is no `coredns-custom` entry to add either.
+
+Sign-in wants a ServiceAccount token. `open-headlamp` (from `k3s-cluster`'s
+client module) prints the URL and mints one, or by hand:
+
+```bash
+kubectl create token headlamp -n headlamp --duration=24h
+```
+
+That token is `cluster-admin`, same as the pod's ServiceAccount. Two settings
+worth knowing before changing them:
+
+- `config.unsafeUseServiceAccountToken` is `false`. Turning it on drops the
+  sign-in prompt entirely, which makes every tailnet device that can reach
+  30080 a silent cluster-admin. Narrow `clusterRoleBinding.clusterRoleName`
+  to a read-only ClusterRole first if this ever becomes a shared dashboard.
+- `config.enableHelm` is `false`. It would put Helm install/upgrade/delete in
+  the UI, which is a route to mutating the cluster behind ArgoCD's back —
+  every release here is owned by a manifest in this repo.
+
+Third-party plugins (ArgoCD, cert-manager, Flux, …) are available through
+`pluginsManager`, left disabled: that sidecar `npx`-fetches plugins into an
+`emptyDir` on *every* pod start, so the pod stops booting whenever npm is
+unreachable, and the plugin set ends up pinned by nothing in git. The ArgoCD
+one is also still `0.1.0-alpha`.
+
 ## Moving a workload to a new node
 
 This is the workflow for migrating e.g. the Minecraft server to a dedicated node.

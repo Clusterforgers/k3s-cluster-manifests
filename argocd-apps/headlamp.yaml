@@ -1,0 +1,73 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: headlamp
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://kubernetes-sigs.github.io/headlamp/
+    chart: headlamp
+    targetRevision: 0.45.0
+    helm:
+      values: |
+        # Reached on <any-node-tailscaleIp>:30080. Deliberately NOT an Ingress:
+        # the nginx controller runs hostNetwork on queen, so anything behind it
+        # is served on queen's public 80/443. NodePorts above 30000 aren't in
+        # server.nix's allowedTCPPorts, so the only interface they're reachable
+        # on is the trusted tailscale0 — same trick apps/registry uses for 30500.
+        service:
+          type: NodePort
+          nodePort: 30080
+
+        config:
+          # Log in by pasting a ServiceAccount token (see README). The
+          # alternative, unsafeUseServiceAccountToken, would make every tailnet
+          # device that can reach 30080 a silent cluster-admin.
+          unsafeUseServiceAccountToken: false
+          # No OIDC here, and without this the chart still ships an empty
+          # "oidc" Secret that ArgoCD would track forever for nothing.
+          oidc:
+            secret:
+              create: false
+          # Bundled plugins that ship inside the image, including the Prometheus
+          # one that draws CPU/memory graphs on workload pages off the existing
+          # kube-prometheus-stack. No npm fetch, no sidecar.
+          staticPlugins:
+            enabled: true
+          # Leave off: this would expose Helm install/upgrade/delete in the UI,
+          # which is a way to mutate the cluster behind ArgoCD's back. Every
+          # release here is owned by a manifest in this repo.
+          enableHelm: false
+
+        # Binds the pod's own ServiceAccount, which is what issued login tokens
+        # authenticate as. Narrow this to a read-only ClusterRole if Headlamp
+        # ever becomes a dashboard for people who shouldn't be able to edit.
+        clusterRoleBinding:
+          create: true
+          clusterRoleName: cluster-admin
+
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            memory: 512Mi
+
+        # Third-party plugins (ArgoCD, cert-manager, Flux, ...) install through
+        # a sidecar that npx-fetches them into an emptyDir on every pod start,
+        # so the pod stops being able to boot when npm is unreachable and the
+        # plugin set isn't pinned by anything in git. Left off on purpose; the
+        # ArgoCD plugin is also still 0.1.0-alpha. Schema and catalogue:
+        # https://headlamp.dev/docs/latest/installation/in-cluster/#installing-plugins
+        pluginsManager:
+          enabled: false
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: headlamp
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
