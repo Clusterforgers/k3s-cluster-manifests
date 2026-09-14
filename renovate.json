@@ -59,17 +59,15 @@
       "automerge": true
     },
     {
-      "description": "Nextcloud only supports upgrading one major at a time, so majors are reviewed by hand and never grouped away",
+      "description": "Nextcloud only supports upgrading one major at a time and runs occ migrations on every bump, so all updates are reviewed by hand. Must stay below the Docker automerge rule to override it.",
       "matchDatasources": ["docker"],
       "matchPackageNames": ["docker.io/library/nextcloud"],
-      "matchUpdateTypes": ["major"],
       "automerge": false
     },
     {
-      "description": "Immich majors have carried breaking database migrations (v3.0.0 dropped pgvecto.rs); review by hand",
+      "description": "Immich releases (minors included) have carried breaking database migrations (v3.0.0 dropped pgvecto.rs), so all updates are reviewed by hand. Must stay below the Docker automerge rule to override it.",
       "matchDatasources": ["docker"],
       "matchPackageNames": ["ghcr.io/immich-app/immich-server"],
-      "matchUpdateTypes": ["major"],
       "automerge": false
     },
     {
