@@ -53,7 +53,7 @@ immich:
           # and the helm-values manager has nothing to key off on its own.
           # renovate: datasource=docker depName=ghcr.io/immich-app/immich-server
           image:
-            tag: v3.2.1
+            tag: v3.2.2
           env:
             REDIS_HOSTNAME: '{{ printf "%s-valkey" .Release.Name }}'
             IMMICH_MACHINE_LEARNING_URL: '{{ printf "http://%s-machine-learning:3003" .Release.Name }}'
