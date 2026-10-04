@@ -55,6 +55,8 @@ nextcloud:
         $CONFIG = array(
           'default_phone_region' => 'DK',
           'maintenance_window_start' => 2,
+          // Warnings and up; config.php had 0 (debug), which filled the log
+          'loglevel' => 2,
         );
       redis.config.php: |-
         <?php
