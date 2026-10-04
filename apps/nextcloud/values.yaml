@@ -114,6 +114,60 @@ nextcloud:
         storageClass: longhorn-queen-bulk
         size: 5Gi
 
+      # The chart's "small" preset (768Mi limit) was already ~85% used before
+      # the buffer pool below was raised from its 128M default.
+      resources:
+        requests:
+          cpu: 250m
+          memory: 1Gi
+        limits:
+          memory: 3Gi
+
+      # Replaces the chart's my.cnf wholesale (there is no merge), so the
+      # [mysqld] paths below are copied from the chart default. Tuned per
+      # Nextcloud's own database advisor (Admin settings > System > Database).
+      configuration: |-
+        [mysqld]
+        skip-name-resolve
+        explicit_defaults_for_timestamp
+        basedir=/opt/bitnami/mariadb
+        datadir=/bitnami/mariadb/data
+        plugin_dir=/opt/bitnami/mariadb/plugin
+        port=3306
+        socket=/opt/bitnami/mariadb/tmp/mysql.sock
+        tmpdir=/opt/bitnami/mariadb/tmp
+        max_allowed_packet=16M
+        bind-address=*
+        pid-file=/opt/bitnami/mariadb/tmp/mysqld.pid
+        log-error=/opt/bitnami/mariadb/logs/mysqld.log
+        # Nextcloud's tables are already utf8mb4_bin; the chart default of UTF8
+        # (utf8mb3) only applied to the server and schema defaults.
+        character-set-server=utf8mb4
+        collation-server=utf8mb4_bin
+        binlog_expire_logs_seconds=2592000
+        # Peak usage hit 128 of the default 151
+        max_connections=250
+        innodb_buffer_pool_size=1G
+        innodb_log_file_size=256M
+        tmp_table_size=64M
+        max_heap_table_size=64M
+        table_open_cache=4000
+        # Off: the log would land on the container's ephemeral storage and
+        # grow unbounded. Turn on temporarily when chasing a slow query.
+        slow_query_log=0
+        long_query_time=2
+
+        [client]
+        port=3306
+        socket=/opt/bitnami/mariadb/tmp/mysql.sock
+        default-character-set=utf8mb4
+        plugin_dir=/opt/bitnami/mariadb/plugin
+
+        [manager]
+        port=3306
+        socket=/opt/bitnami/mariadb/tmp/mysql.sock
+        pid-file=/opt/bitnami/mariadb/tmp/mysqld.pid
+
   redis:
     enabled: true
     auth:
