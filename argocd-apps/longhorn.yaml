@@ -16,6 +16,10 @@ spec:
         defaultSettings:
           defaultReplicaCount: 1
           storageOverProvisioningPercentage: 200
+          # Move volumes onto the new engine image after each Longhorn upgrade
+          # (live for attached volumes). One at a time per node, since every
+          # volume here has a single replica.
+          concurrentAutomaticEngineUpgradePerNodeLimit: 1
         persistence:
           defaultClassIsDefault: true
           defaultClassReplicaCount: 1
