@@ -176,6 +176,19 @@ nextcloud:
         limits:
           memory: 2Gi
 
+  # The image entrypoint runs `occ upgrade` before Apache starts whenever the
+  # image is newer than the installed version, with maintenance mode switched
+  # on for the duration. With only the default liveness probe (~40s grace) the
+  # kubelet kills the container mid-upgrade and Nextcloud is left stuck in
+  # maintenance mode. Liveness/readiness are held off until this succeeds, so
+  # an upgrade gets up to 30s + 60 * 10s = ~10.5 minutes to finish.
+  startupProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 60
+
   service:
     type: ClusterIP
     port: 80
