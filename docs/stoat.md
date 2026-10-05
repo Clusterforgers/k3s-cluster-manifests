@@ -62,8 +62,16 @@ adding `REVOLT__API__SECURITY__TENOR_KEY` to `stoat-secrets` and restarting
 
 ## Invites
 
-Registration is invite-only (`registration.inviteOnly`). To create an invite
-code:
+Registration is invite-only (`registration.inviteOnly`), and codes are
+single-use. Use `stoat-invite` from `k3s-cluster`'s client module:
+
+```bash
+stoat-invite          # random code, prints a ready-to-send message
+stoat-invite mads     # named code
+stoat-invite --list   # every code, used/free, and who claimed it
+```
+
+Under the hood that is just:
 
 ```bash
 kubectl -n stoat exec deploy/database -- mongosh revolt --quiet \
