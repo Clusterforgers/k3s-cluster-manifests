@@ -25,6 +25,9 @@ spec:
       hostNetwork: true
       # Keep cluster DNS so redis/voice-ingress Service names resolve.
       dnsPolicy: ClusterFirstWithHostNet
+      # The `livekit` Service would inject LIVEKIT_PORT=tcp://..., which
+      # livekit-server reads as its own --port flag and crashes on.
+      enableServiceLinks: false
       nodeSelector:
         {{- toYaml .Values.nodeSelector | nindent 8 }}
       containers:
