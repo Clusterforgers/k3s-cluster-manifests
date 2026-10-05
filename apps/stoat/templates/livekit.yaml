@@ -1,0 +1,67 @@
+---
+# LiveKit: voice/video SFU. Runs on the host network on queen, because WebRTC
+# media needs TCP 7881 + UDP 50000-50100 reachable on the public IP as-is
+# (opened in servers' queen/configuration.nix and port-forwarded on the router).
+# Signalling (7880) is not opened publicly; clients reach it through
+# Caddy at wss://<host>/livekit.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: livekit
+  namespace: stoat
+spec:
+  replicas: 1
+  # Host ports can't be held by two pods at once.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: livekit
+  template:
+    metadata:
+      labels:
+        app: livekit
+    spec:
+      hostNetwork: true
+      # Keep cluster DNS so redis/voice-ingress Service names resolve.
+      dnsPolicy: ClusterFirstWithHostNet
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      containers:
+        - name: livekit
+          image: {{ .Values.images.livekit }}
+          args: ["--config", "/etc/livekit.yml"]
+          ports:
+            - name: http
+              containerPort: 7880
+            - name: rtc-tcp
+              containerPort: 7881
+          volumeMounts:
+            - name: config
+              mountPath: /etc/livekit.yml
+              subPath: livekit.yml
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 2Gi
+      volumes:
+        - name: config
+          secret:
+            secretName: {{ .Values.livekitSecret }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: livekit
+  namespace: stoat
+spec:
+  selector:
+    app: livekit
+  ports:
+    - name: http
+      port: 7880
+      targetPort: 7880

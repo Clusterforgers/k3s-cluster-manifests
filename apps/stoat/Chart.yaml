@@ -1,0 +1,5 @@
+apiVersion: v2
+name: stoat
+description: Self-hosted Stoat chat (formerly Revolt), translated from stoatchat/self-hosted's compose.yml
+type: application
+version: 0.1.0

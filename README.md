@@ -80,6 +80,14 @@ Both apps read the same files on one shared RWX volume. See
 [docs/family-photos.md](docs/family-photos.md) for the folder layout, how
 per-family isolation is enforced, and the procedure for adding a new person.
 
+## Stoat chat
+
+Stoat (formerly Revolt) runs at `stoat.hivemindcloud.dk` (`apps/stoat`), translated
+from upstream's docker-compose setup. Registration is invite-only. Voice/video
+needs TCP 7881 + UDP 50000-50100 opened on queen and forwarded on the router.
+See [docs/stoat.md](docs/stoat.md) for secrets (back up the files encryption
+key!), creating invites, and upgrading.
+
 ## Game servers
 
 Minecraft (`apps/minecraft`) runs on `bullet`, ARK: Survival Evolved

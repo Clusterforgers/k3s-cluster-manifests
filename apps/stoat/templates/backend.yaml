@@ -1,0 +1,99 @@
+{{- /*
+The stoatchat backend services all share one shape: the same Revolt.toml,
+the same REVOLT__* secrets, and (for most) one HTTP port that Caddy routes to.
+Names match upstream compose so the defaults baked into the images
+(mongodb://database, rabbit:5672, http://minio:9000, ...) resolve unchanged.
+*/ -}}
+{{- $services := list
+  (dict "name" "api" "image" .Values.images.api "port" 14702)
+  (dict "name" "events" "image" .Values.images.events "port" 14703)
+  (dict "name" "autumn" "image" .Values.images.autumn "port" 14704 "createBucket" true)
+  (dict "name" "january" "image" .Values.images.january "port" 14705)
+  (dict "name" "gifbox" "image" .Values.images.gifbox "port" 14706)
+  (dict "name" "crond" "image" .Values.images.crond)
+  (dict "name" "pushd" "image" .Values.images.pushd)
+  (dict "name" "voice-ingress" "image" .Values.images.voiceIngress "port" 8500)
+}}
+{{- range $services }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .name }}
+  namespace: stoat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .name }}
+      annotations:
+        # Revolt.toml is mounted via subPath, which never live-updates, so
+        # roll the pods whenever it changes.
+        checksum/config: {{ include (print $.Template.BasePath "/config.yaml") $ | sha256sum }}
+    spec:
+      nodeSelector:
+        {{- toYaml $.Values.nodeSelector | nindent 8 }}
+      {{- if .createBucket }}
+      # Replaces compose's one-shot `createbuckets` container.
+      initContainers:
+        - name: create-bucket
+          image: {{ $.Values.images.mc }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              until mc alias set minio http://minio:9000 minioautumn "$MINIO_PASSWORD"; do
+                echo "Waiting for minio..."; sleep 2
+              done
+              mc mb --ignore-existing minio/revolt-uploads
+          env:
+            - name: MINIO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.existingSecret }}
+                  key: REVOLT__FILES__S3__SECRET_ACCESS_KEY
+      {{- end }}
+      containers:
+        - name: {{ .name }}
+          image: {{ .image }}
+          envFrom:
+            - secretRef:
+                name: {{ $.Values.existingSecret }}
+          {{- if .port }}
+          ports:
+            - containerPort: {{ .port }}
+          {{- end }}
+          volumeMounts:
+            - name: revolt-toml
+              mountPath: /Revolt.toml
+              subPath: Revolt.toml
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 1Gi
+      volumes:
+        - name: revolt-toml
+          configMap:
+            name: revolt-toml
+{{- if .port }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .name }}
+  namespace: stoat
+spec:
+  selector:
+    app: {{ .name }}
+  ports:
+    - port: {{ .port }}
+      targetPort: {{ .port }}
+{{- end }}
+{{- end }}

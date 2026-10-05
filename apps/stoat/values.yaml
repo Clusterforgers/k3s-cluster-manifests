@@ -1,0 +1,57 @@
+# Stoat (stoat.chat, formerly Revolt). A hand translation of the upstream
+# docker-compose setup at https://github.com/stoatchat/self-hosted - see
+# docs/stoat.md before bumping versions, upstream sometimes ships manual
+# migration steps in its README "Notices" section.
+host: stoat.hivemindcloud.dk
+
+# Everything is pinned to queen: the nginx ingress (and so the public IP) is
+# there, and LiveKit binds its RTC ports straight on the node.
+nodeSelector:
+  kubernetes.io/hostname: queen
+
+# Must already exist (see docs/stoat.md for how they were generated):
+#   stoat-secrets  - REVOLT__* env overrides (VAPID keys, files encryption key,
+#                    LiveKit key/secret, rabbit + minio passwords)
+#   stoat-livekit  - livekit.yml (embeds the LiveKit key/secret)
+# Losing REVOLT__FILES__ENCRYPTION_KEY makes every uploaded file unreadable.
+existingSecret: stoat-secrets
+livekitSecret: stoat-livekit
+
+# Tags match upstream compose.yml for the release in the comment. Bumped by
+# hand rather than by Renovate: the stoatchat images have to move together,
+# and upstream releases can need manual migrations.
+images:
+  # stoatchat/self-hosted @ backend v0.15.5
+  api: ghcr.io/stoatchat/api:v0.15.5
+  events: ghcr.io/stoatchat/events:v0.15.5
+  autumn: ghcr.io/stoatchat/file-server:v0.15.5
+  january: ghcr.io/stoatchat/proxy:v0.15.5
+  gifbox: ghcr.io/stoatchat/gifbox:v0.15.5
+  crond: ghcr.io/stoatchat/crond:v0.15.5
+  pushd: ghcr.io/stoatchat/pushd:v0.15.5
+  voiceIngress: ghcr.io/stoatchat/voice-ingress:v0.15.5
+  livekit: ghcr.io/stoatchat/livekit-server:v1.9.14
+  # for-web v0.15.3
+  web: ghcr.io/stoatchat/for-web:4017c18
+  caddy: docker.io/caddy:2
+  # Upstream leaves these untagged; pinned here so a pod restart can't jump a
+  # MongoDB major version (those need a stepwise upgrade).
+  mongo: docker.io/mongo:9.0
+  redis: docker.io/valkey/valkey:9-alpine
+  rabbit: docker.io/rabbitmq:4.3
+  minio: docker.io/pgsty/silo:RELEASE.2026-09-16T00-00-00Z
+  mc: docker.io/pgsty/mc:RELEASE.2026-09-16T00-00-00Z
+
+persistence:
+  storageClass: longhorn-queen-bulk
+  mongo: 10Gi
+  minio: 50Gi
+  rabbit: 2Gi
+
+# Non-secret Revolt.toml settings. Secrets come from env (REVOLT__SECTION__KEY).
+registration:
+  # New accounts need an invite code, see docs/stoat.md.
+  inviteOnly: true
+
+# Max upload body nginx lets through; Stoat's own body_limit_size is 20MB.
+proxyBodySize: 25m

@@ -1,0 +1,125 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: stoat
+
+---
+# Mounted at /Revolt.toml in every backend service. Only non-secret settings
+# live here; secrets are REVOLT__* env vars from the stoat-secrets Secret, which
+# the config loader layers on top (Environment::with_prefix("REVOLT")).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: revolt-toml
+  namespace: stoat
+data:
+  Revolt.toml: |
+    [hosts]
+    app = "https://{{ .Values.host }}"
+    api = "https://{{ .Values.host }}/api"
+    events = "wss://{{ .Values.host }}/ws"
+    autumn = "https://{{ .Values.host }}/autumn"
+    january = "https://{{ .Values.host }}/january"
+    gifbox = "https://{{ .Values.host }}/gifbox"
+
+    [hosts.livekit]
+    worldwide = "wss://{{ .Values.host }}/livekit"
+
+    [api.registration]
+    invite_only = {{ .Values.registration.inviteOnly }}
+
+    [api.livekit.nodes.worldwide]
+    url = "http://livekit:7880"
+    lat = 0.0
+    lon = 0.0
+
+    # Compose resolves virtual-host bucket names through network aliases
+    # (revolt-uploads.minio, ...). Kubernetes has no equivalent, so use
+    # path-style requests against the plain `minio` Service instead.
+    [files.s3]
+    path_style_buckets = true
+
+    [features.limits.new_user]
+    video_resolution = [1920, 1080]
+    video_aspect_ratio = [0.3, 10]
+
+    [features.limits.default]
+    video_resolution = [1920, 1080]
+    video_aspect_ratio = [0.3, 10]
+
+---
+# Upstream Caddyfile, verbatim. Caddy is kept as an internal path router behind
+# the nginx ingress (HOSTNAME=:80, TLS terminates at nginx) so upstream routing
+# changes can be copied straight across.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: caddy
+  namespace: stoat
+data:
+  Caddyfile: |
+    {$HOSTNAME} {
+    	route /.well-known/stoat {
+    		uri strip_prefix /.well-known/stoat
+    		header {
+    			Access-Control-Allow-Origin *
+    		}
+    		file_server {
+    			root /stoat.json
+    		}
+    	}
+
+    	route /api* {
+    		uri strip_prefix /api
+    		reverse_proxy http://api:14702 {
+    			header_down Location "^/" "/api/"
+    		}
+    	}
+
+    	route /ws {
+    		uri strip_prefix /ws
+    		reverse_proxy http://events:14703 {
+    			header_down Location "^/" "/ws/"
+    		}
+    	}
+
+    	route /autumn* {
+    		uri strip_prefix /autumn
+    		reverse_proxy http://autumn:14704 {
+    			header_down Location "^/" "/autumn/"
+    		}
+    	}
+
+    	route /january* {
+    		uri strip_prefix /january
+    		reverse_proxy http://january:14705 {
+    			header_down Location "^/" "/january/"
+    		}
+    	}
+
+    	route /gifbox* {
+    		uri strip_prefix /gifbox
+    		reverse_proxy http://gifbox:14706 {
+    			header_down Location "^/" "/gifbox/"
+    		}
+    	}
+
+    	route /livekit* {
+    		uri strip_prefix /livekit
+    		reverse_proxy http://livekit:7880 {
+    			header_down Location "^/" "/livekit/"
+    		}
+    	}
+
+    	route /ingress* {
+    		uri strip_prefix /ingress
+    		reverse_proxy http://voice-ingress:8500 {
+    			header_down Location "^/" "/ingress/"
+    		}
+    	}
+
+    	reverse_proxy http://web:5000
+    }
+  # Client discovery document served at /.well-known/stoat
+  stoat.json: '{"api":"https://{{ .Values.host }}/api"}'

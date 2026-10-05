@@ -1,0 +1,258 @@
+{{- range $name, $size := dict "mongo" .Values.persistence.mongo "minio" .Values.persistence.minio "rabbit" .Values.persistence.rabbit }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}-data
+  namespace: stoat
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ $.Values.persistence.storageClass }}
+  resources:
+    requests:
+      storage: {{ $size }}
+{{- end }}
+
+---
+# MongoDB: main database. No auth, same as upstream - it's ClusterIP only.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: database
+  namespace: stoat
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: database
+  template:
+    metadata:
+      labels:
+        app: database
+    spec:
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      containers:
+        - name: mongo
+          image: {{ .Values.images.mongo }}
+          ports:
+            - containerPort: 27017
+          readinessProbe:
+            exec:
+              command: ["mongosh", "--quiet", "--eval", "db.runCommand('ping').ok"]
+            periodSeconds: 10
+            timeoutSeconds: 10
+          volumeMounts:
+            # subPath keeps the Longhorn volume's lost+found out of the dbpath
+            - name: data
+              mountPath: /data/db
+              subPath: db
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 2Gi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: mongo-data
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: database
+  namespace: stoat
+spec:
+  selector:
+    app: database
+  ports:
+    - port: 27017
+      targetPort: 27017
+
+---
+# Valkey: event broker & KV cache. Ephemeral, as upstream.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: stoat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      containers:
+        - name: valkey
+          image: {{ .Values.images.redis }}
+          ports:
+            - containerPort: 6379
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 512Mi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: stoat
+spec:
+  selector:
+    app: redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+
+---
+# RabbitMQ: internal message broker (api/pushd/voice-ingress)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rabbit
+  namespace: stoat
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: rabbit
+  template:
+    metadata:
+      labels:
+        app: rabbit
+    spec:
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      containers:
+        - name: rabbitmq
+          image: {{ .Values.images.rabbit }}
+          env:
+            # The data dir is keyed by node name, which defaults to the pod
+            # hostname - pin it so a restarted pod finds its old data.
+            - name: RABBITMQ_NODENAME
+              value: rabbit@localhost
+            - name: RABBITMQ_DEFAULT_USER
+              value: rabbituser
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecret }}
+                  key: REVOLT__RABBIT__PASSWORD
+          ports:
+            - containerPort: 5672
+          readinessProbe:
+            exec:
+              command: ["rabbitmq-diagnostics", "-q", "ping"]
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/rabbitmq
+              subPath: rabbitmq
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: rabbit-data
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbit
+  namespace: stoat
+spec:
+  selector:
+    app: rabbit
+  ports:
+    - port: 5672
+      targetPort: 5672
+
+---
+# Silo (MinIO fork): S3 storage for uploads
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: stoat
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      containers:
+        - name: minio
+          image: {{ .Values.images.minio }}
+          args: ["server", "/data"]
+          env:
+            - name: MINIO_ROOT_USER
+              value: minioautumn
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecret }}
+                  key: REVOLT__FILES__S3__SECRET_ACCESS_KEY
+          ports:
+            - containerPort: 9000
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: 9000
+          volumeMounts:
+            - name: data
+              mountPath: /data
+              subPath: minio
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 1Gi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: minio-data
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: stoat
+spec:
+  selector:
+    app: minio
+  ports:
+    - port: 9000
+      targetPort: 9000
