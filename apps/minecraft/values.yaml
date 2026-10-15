@@ -15,7 +15,7 @@ minecraft:
     serviceType: LoadBalancer
     memory: 11264M
     motd: "StoneBlock 4"
-    overrideServerProperties: false
+    overrideServerProperties: true
     rcon:
       enabled: true
       password: "changeme123"
