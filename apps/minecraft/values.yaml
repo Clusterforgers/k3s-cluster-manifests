@@ -7,11 +7,14 @@ minecraft:
 
   minecraftServer:
     eula: "TRUE"
-    type: FORGE
-    version: "1.20.1"
+    type: FTBA
+    # FTB StoneBlock 4 1.23.0 (MC 1.21.1 / NeoForge 21.1.250). Pinned so a
+    # resync doesn't silently upgrade the pack under an existing world.
+    ftbModpackId: 130
+    ftbModpackVersionId: 100554
     serviceType: LoadBalancer
     memory: 11264M
-    motd: "star-technology"
+    motd: "StoneBlock 4"
     overrideServerProperties: false
     rcon:
       enabled: true
@@ -36,46 +39,3 @@ minecraft:
       # storage-class annotation that conflicts with the live object.
       existingClaim: minecraft-datadir
       Size: 20Gi
-
-  initContainers:
-    - name: download-modpack
-      image: python:3-slim
-      securityContext:
-        runAsUser: 1000
-        runAsGroup: 1000
-      command: ["python3", "-c"]
-      args:
-        - |
-          import os, sys, zipfile, subprocess
-          from urllib.request import urlopen
-
-          MODPACK_URL = os.environ['MODPACK_URL']
-          DATA_DIR = '/data'
-
-          mods_dir = os.path.join(DATA_DIR, 'mods')
-          if os.path.isdir(mods_dir) and os.listdir(mods_dir):
-              print('Modpack already installed, skipping')
-              sys.exit(0)
-
-          zip_path = '/tmp/serverpack.zip'
-          print(f'Downloading from: {MODPACK_URL}')
-          with urlopen(MODPACK_URL) as r, open(zip_path, 'wb') as f:
-              downloaded = 0
-              while chunk := r.read(131072):
-                  f.write(chunk)
-                  downloaded += len(chunk)
-                  if downloaded % (100 * 1024 * 1024) < 131072:
-                      print(f'{downloaded // (1024*1024)}MB downloaded...')
-
-          print('Extracting to /data...')
-          with zipfile.ZipFile(zip_path) as zf:
-              zf.extractall(DATA_DIR)
-          os.remove(zip_path)
-
-          print('Done!')
-      env:
-        - name: MODPACK_URL
-          value: "https://mediafilez.forgecdn.net/files/8174/581/StarT%20Theta%201%20HF%203%20Server%20Files.zip"
-      volumeMounts:
-        - name: datadir
-          mountPath: /data
