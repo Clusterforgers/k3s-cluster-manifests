@@ -1,0 +1,32 @@
+# Magic web platform (github.com/Clusterforgers/magic). One image tag for the server,
+# the data tool and the web client; `scripts/release.sh` in that repo builds the images
+# and rewrites `tag`. See docs/magic.md for the first install, a release and a rollback.
+host: magic.hivemindcloud.dk
+
+tag: v0.0.0
+
+images:
+  server: 100.96.184.94:30500/magic-server
+  web: 100.96.184.94:30500/magic-web
+  # A Postgres major is a data migration; bump it by hand.
+  postgres: docker.io/library/postgres:17-alpine
+
+# Pinned to queen: the nginx ingress (and so the public IP) is there, and the
+# images are built for amd64.
+nodeSelector:
+  kubernetes.io/hostname: queen
+
+# Must already exist (see docs/magic.md): POSTGRES_PASSWORD and DATABASE_URL.
+existingSecret: magic-secrets
+
+persistence:
+  # Retain keeps the volumes when the app is pruned.
+  storageClass: longhorn-queen-bulk
+  database: 10Gi
+  # The picture cache fills from the Scryfall CDN; losing it only costs refetching.
+  images: 5Gi
+
+server:
+  # `closed` refuses new accounts; existing ones keep working.
+  registration: open
+  imageCacheMiB: 4096

@@ -1,0 +1,78 @@
+# After each sync the compiler writes the rules of the stored cards again; unchanged cards are skipped.
+# Before the first card load there is nothing to compile, which is not a failure of the release.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: magic-compile
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      containers:
+        - name: compile
+          image: {{ include "magic.serverImage" . }}
+          command:
+            - sh
+            - -c
+            - |
+              out=$(mtg-cli compile 2>&1) && { echo "$out"; exit 0; }
+              echo "$out"
+              case "$out" in *"no cards are stored"*) exit 0 ;; esac
+              exit 1
+          env:
+            {{- include "magic.databaseEnv" . | nindent 12 }}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 2Gi}
+---
+# The first load and every refresh of the card data, started by hand:
+#   kubectl -n magic create job --from=cronjob/magic-ingest ingest-$(date +%F)
+# It downloads the Scryfall and MTGJSON files into a scratch volume, loads them and compiles the rules.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: magic-ingest
+spec:
+  suspend: true
+  schedule: "0 0 1 1 *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        spec:
+          restartPolicy: Never
+          nodeSelector:
+            {{- toYaml .Values.nodeSelector | nindent 12 }}
+          {{- include "magic.podSecurity" . | nindent 10 }}
+          containers:
+            - name: ingest
+              image: {{ include "magic.serverImage" . }}
+              command:
+                - sh
+                - -ec
+                - |
+                  mtg-cli fetch scryfall --printings
+                  mtg-cli fetch decks
+                  mtg-cli ingest
+                  mtg-cli compile
+              env:
+                {{- include "magic.databaseEnv" . | nindent 16 }}
+                - name: MTG_CACHE_DIR
+                  value: /cache
+              resources:
+                requests: {cpu: 200m, memory: 512Mi}
+                limits: {memory: 4Gi}
+              volumeMounts:
+                - name: cache
+                  mountPath: /cache
+          volumes:
+            - name: cache
+              emptyDir:
+                sizeLimit: 3Gi

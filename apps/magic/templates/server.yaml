@@ -1,0 +1,91 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: magic-images
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: {{ .Values.persistence.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.images }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: magic-server
+spec:
+  replicas: 1
+  # One server owns the running games and the picture cache, so the old pod stops first.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: magic-server
+  template:
+    metadata:
+      labels:
+        app: magic-server
+    spec:
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      {{- include "magic.podSecurity" . | nindent 6 }}
+      terminationGracePeriodSeconds: 30
+      initContainers:
+        # The card tables belong to the data tool; a release applies their migrations before the server starts.
+        - name: migrate
+          image: {{ include "magic.serverImage" . }}
+          command: ["mtg-cli", "migrate"]
+          env:
+            {{- include "magic.databaseEnv" . | nindent 12 }}
+      containers:
+        - name: server
+          image: {{ include "magic.serverImage" . }}
+          env:
+            {{- include "magic.databaseEnv" . | nindent 12 }}
+            - name: MTG_ALLOWED_ORIGINS
+              value: https://{{ .Values.host }}
+            - name: MTG_COOKIE_SECURE
+              value: "1"
+            # The ingress is the one proxy in front of the server.
+            - name: MTG_TRUSTED_PROXIES
+              value: "1"
+            - name: MTG_REGISTRATION
+              value: {{ .Values.server.registration | quote }}
+            - name: MTG_IMAGE_CACHE
+              value: /cache/images
+            - name: MTG_IMAGE_CACHE_MIB
+              value: {{ .Values.server.imageCacheMiB | quote }}
+          ports:
+            - containerPort: 8080
+          startupProbe:
+            httpGet: {path: /healthz, port: 8080}
+            periodSeconds: 2
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8080}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: 8080}
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 2Gi}
+          volumeMounts:
+            - name: cache
+              mountPath: /cache
+      volumes:
+        - name: cache
+          persistentVolumeClaim:
+            claimName: magic-images
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: magic-server
+spec:
+  selector:
+    app: magic-server
+  ports:
+    - port: 8080
+      targetPort: 8080

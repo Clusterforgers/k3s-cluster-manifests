@@ -100,6 +100,10 @@ is **not** an Ingress host, so the `coredns-custom` rule below does *not* apply
 to it — listing it there would resolve it to the ingress ClusterIP, which is
 wrong for a game server.
 
+## Magic
+
+The Magic game server for friends has its own chart in `apps/magic`. See [docs/magic.md](docs/magic.md) for the first install, the secret it needs and how releases reach the cluster.
+
 ## Storage (Longhorn)
 
 The cluster uses [Longhorn](https://longhorn.io) for distributed block storage. It is deployed via `argocd-apps/longhorn.yaml` and is the default storage class, new PVCs automatically use it.

@@ -1,0 +1,5 @@
+apiVersion: v2
+name: magic
+description: "Browser-hosted Magic, the Gathering, for friends (Clusterforgers/magic)"
+type: application
+version: 0.1.0

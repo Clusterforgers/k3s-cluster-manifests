@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: magic-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: magic-web
+  template:
+    metadata:
+      labels:
+        app: magic-web
+    spec:
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      containers:
+        - name: web
+          image: {{ include "magic.webImage" . }}
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet: {path: /, port: 8080}
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {memory: 128Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: magic-web
+spec:
+  selector:
+    app: magic-web
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: magic
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - secretName: magic-tls
+      hosts:
+        - {{ .Values.host }}
+  rules:
+    - host: {{ .Values.host }}
+      http:
+        paths:
+          # The game's HTTP API, the sockets and the health check go to the server; every other path is the client.
+          - {path: /api, pathType: Prefix, backend: {service: {name: magic-server, port: {number: 8080}}}}
+          - {path: /ws, pathType: Prefix, backend: {service: {name: magic-server, port: {number: 8080}}}}
+          - {path: /healthz, pathType: Exact, backend: {service: {name: magic-server, port: {number: 8080}}}}
+          - {path: /, pathType: Prefix, backend: {service: {name: magic-web, port: {number: 80}}}}
