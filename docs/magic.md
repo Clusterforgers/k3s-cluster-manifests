@@ -43,3 +43,18 @@ A browser Magic: The Gathering for friends, deployed from `apps/magic/` into the
 - Database shell: `kubectl -n magic exec -it magic-db-0 -- psql -U magic magic`.
 - Close sign-ups once everyone has an account: `server.registration: closed` in `values.yaml`.
 - Roll back: `scripts/release.sh --rollback vX.Y.Z` in the magic repo.
+
+## Backups
+
+`magic-backup` dumps the whole database every night at 03:30 into the volume `magic-backups` (the newest 14 stay; `backup` in `values.yaml`). The volume is mounted read-only in `magic-db-0` at `/backups`:
+
+```bash
+kubectl -n magic exec magic-db-0 -- ls -lh /backups
+kubectl -n magic cp magic-db-0:/backups/magic-<date>.dump ./magic.dump        # a copy off the cluster
+kubectl -n magic create job --from=cronjob/magic-backup dump-now             # a dump right now
+# restore (while nobody plays), then restart the server
+kubectl -n magic exec magic-db-0 -- pg_restore -U magic -d magic --clean --if-exists --no-owner /backups/magic-<date>.dump
+kubectl -n magic rollout restart deployment/magic-server
+```
+
+The dumps sit on queen like the database, so a copy off the machine (the `kubectl cp` above, or a Longhorn backup target) is what survives losing queen.

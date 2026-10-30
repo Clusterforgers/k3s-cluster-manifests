@@ -25,6 +25,12 @@ persistence:
   database: 10Gi
   # The picture cache fills from the Scryfall CDN; losing it only costs refetching.
   images: 5Gi
+  # Nightly dumps of the database (about 15 of them).
+  backups: 5Gi
+
+backup:
+  schedule: "30 3 * * *"
+  keep: 14
 
 server:
   # `closed` refuses new accounts; existing ones keep working.

@@ -48,6 +48,14 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
+            # The nightly dumps, to restore from or copy out.
+            - name: backups
+              mountPath: /backups
+              readOnly: true
+      volumes:
+        - name: backups
+          persistentVolumeClaim:
+            claimName: magic-backups
   volumeClaimTemplates:
     - metadata:
         name: data
