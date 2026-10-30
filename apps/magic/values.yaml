@@ -3,7 +3,7 @@
 # and rewrites `tag`. See docs/magic.md for the first install, a release and a rollback.
 host: magic.hivemindcloud.dk
 
-tag: v0.1.1
+tag: v0.1.2
 
 images:
   server: 100.96.184.94:30500/magic-server
