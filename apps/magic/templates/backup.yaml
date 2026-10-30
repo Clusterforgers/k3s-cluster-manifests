@@ -41,6 +41,7 @@ spec:
                 - -ec
                 - |
                   file=/backups/magic-$(date +%Y-%m-%d-%H%M).dump
+                  trap 'rm -f "$file.part"' EXIT
                   pg_dump -h magic-db -U magic -d magic -Fc -f "$file.part"
                   mv "$file.part" "$file"
                   ls -t /backups/magic-*.dump | tail -n +$(({{ .Values.backup.keep }} + 1)) | xargs -r rm -f
