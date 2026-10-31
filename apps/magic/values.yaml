@@ -33,6 +33,8 @@ backup:
   keep: 14
 
 server:
-  # `closed` refuses new accounts; existing ones keep working.
-  registration: open
+  # `closed` refuses self-registration; the admin makes accounts from the client.
+  registration: closed
+  # The account (by username) that is the admin and the only one who makes accounts.
+  admin: Chrisser
   imageCacheMiB: 4096

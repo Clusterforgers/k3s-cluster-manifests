@@ -51,6 +51,10 @@ spec:
               value: "1"
             - name: MTG_REGISTRATION
               value: {{ .Values.server.registration | quote }}
+            {{- with .Values.server.admin }}
+            - name: MTG_ADMIN_USERNAME
+              value: {{ . | quote }}
+            {{- end }}
             - name: MTG_IMAGE_CACHE
               value: /cache/images
             - name: MTG_IMAGE_CACHE_MIB
