@@ -21,7 +21,7 @@ spec:
             - sh
             - -c
             - |
-              out=$(mtg-cli compile 2>&1) && { echo "$out"; exit 0; }
+              out=$(mtg-cli compile --all 2>&1) && { echo "$out"; exit 0; }
               echo "$out"
               case "$out" in *"no cards are stored"*) exit 0 ;; esac
               exit 1
@@ -61,7 +61,7 @@ spec:
                   mtg-cli fetch scryfall --printings
                   mtg-cli fetch decks
                   mtg-cli ingest
-                  mtg-cli compile
+                  mtg-cli compile --all
               env:
                 {{- include "magic.databaseEnv" . | nindent 16 }}
                 - name: MTG_CACHE_DIR
