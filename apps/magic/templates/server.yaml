@@ -74,8 +74,8 @@ spec:
             timeoutSeconds: 5
             failureThreshold: 45
           resources:
-            requests: {cpu: 100m, memory: 256Mi}
-            limits: {memory: 2Gi}
+            requests: {cpu: 100m, memory: 2Gi}
+            limits: {memory: 5Gi}
           volumeMounts:
             - name: cache
               mountPath: /cache
