@@ -71,7 +71,8 @@ spec:
           livenessProbe:
             httpGet: {path: /healthz, port: 8080}
             periodSeconds: 20
-            failureThreshold: 3
+            timeoutSeconds: 5
+            failureThreshold: 45
           resources:
             requests: {cpu: 100m, memory: 256Mi}
             limits: {memory: 2Gi}
