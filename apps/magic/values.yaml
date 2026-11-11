@@ -33,8 +33,9 @@ backup:
   keep: 14
 
 server:
-  # `closed` refuses self-registration; the admin makes accounts from the client.
+  # `closed` refuses self-registration; the admins make accounts from the client.
   registration: closed
-  # The account (by username) that is the admin and the only one who makes accounts.
-  admin: Chrisser
+  # The accounts (by username) that are admins and make accounts; a name taken off the list
+  # loses admin at the next start. `admin: <name>` (one name) still works as well.
+  admins: [Chrisser, Ebbe]
   imageCacheMiB: 4096
