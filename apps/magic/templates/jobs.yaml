@@ -21,27 +21,43 @@ spec:
             - sh
             - -c
             - |
-              out=$(mtg-cli compile --all 2>&1) && { echo "$out"; exit 0; }
+              out=$(mtg-cli compile --all 2>&1) && { echo "$out"; mtg-cli coverage --all --snapshot || true; exit 0; }
               echo "$out"
               case "$out" in *"no cards are stored"*) exit 0 ;; esac
               exit 1
           env:
             {{- include "magic.databaseEnv" . | nindent 12 }}
+            - name: MTG_RELEASE
+              value: {{ .Values.tag | quote }}
           resources:
             requests: {cpu: 100m, memory: 256Mi}
             limits: {memory: 2Gi}
 ---
-# The first load and every refresh of the card data, started by hand:
+# The daily check for new cards and precons: it downloads what changed into a kept cache, loads and compiles it
+# (deferred while a game runs) and records a coverage snapshot for the Card support page. By hand:
 #   kubectl -n magic create job --from=cronjob/magic-ingest ingest-$(date +%F)
-# It downloads the Scryfall and MTGJSON files into a scratch volume, loads them and compiles the rules.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: magic-card-cache
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: {{ .Values.persistence.storageClass }}
+  resources:
+    requests:
+      storage: 4Gi
+---
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: magic-ingest
 spec:
-  suspend: true
-  schedule: "0 0 1 1 *"
+  schedule: "0 4 * * *"
+  timeZone: Europe/Copenhagen
+  startingDeadlineSeconds: 3600
   concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
   jobTemplate:
     spec:
       backoffLimit: 0
@@ -54,16 +70,11 @@ spec:
           containers:
             - name: ingest
               image: {{ include "magic.serverImage" . }}
-              command:
-                - sh
-                - -ec
-                - |
-                  mtg-cli fetch scryfall --printings
-                  mtg-cli fetch decks
-                  mtg-cli ingest
-                  mtg-cli compile --all
+              command: [mtg-cli, refresh]
               env:
                 {{- include "magic.databaseEnv" . | nindent 16 }}
+                - name: MTG_RELEASE
+                  value: {{ .Values.tag | quote }}
                 - name: MTG_CACHE_DIR
                   value: /cache
               resources:
@@ -74,5 +85,5 @@ spec:
                   mountPath: /cache
           volumes:
             - name: cache
-              emptyDir:
-                sizeLimit: 3Gi
+              persistentVolumeClaim:
+                claimName: magic-card-cache
