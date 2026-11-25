@@ -18,6 +18,8 @@ spec:
       containers:
         - name: postgres
           image: {{ .Values.images.postgres }}
+          # The card tables (about 280 MB) and recent game events stay in memory.
+          args: ["-c", "shared_buffers=512MB", "-c", "effective_cache_size=1536MB"]
           env:
             - name: POSTGRES_USER
               value: magic
@@ -44,7 +46,7 @@ spec:
             periodSeconds: 20
           resources:
             requests: {cpu: 100m, memory: 256Mi}
-            limits: {memory: 1Gi}
+            limits: {memory: 2Gi}
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
